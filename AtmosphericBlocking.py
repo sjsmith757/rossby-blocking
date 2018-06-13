@@ -36,7 +36,7 @@ class Model(object):
         self._allocate_variables()
         self._initialize_grid()
         self._initialize_C()
-        self._initialize_rk3w()
+        self._initialize_etdrk4()
 
         #self._initialize_diagnostics()
 
@@ -58,59 +58,71 @@ class Model(object):
         self._print_status()
 
         # time step
-        #self._step_euler()
-        self._step_rk3w()
+        #self._step_euler()   # Simple-minded Euler
+        self._step_etdrk4()   # Exponential time differencing RK4
 
         self.tc += 1
         self.t += self.dt
+
 
     def _step_euler(self):
         self._update_S()
         self.rhs = self.calc_rhs()
         self.Ah += self.rhs*self.dt
 
+    def _initialize_etdrk4(self):
 
+        """ This performs pre-computations for the Expotential Time Differencing
+            Fourth Order Runge Kutta time stepper. The linear part is calculated
+            exactly.
 
+            See Cox and Matthews, J. Comp. Physics., 176(2):430-455, 2002.
+                Kassam and Trefethen, IAM J. Sci. Comput., 26(4):1214-233, 2005. """
 
-    def _initialize_rk3w(self):
+        # the exponent for the linear part
+        self.c = - (self.D*self.k2 + 1./self.tau)
 
-        """ This pre-computes coefficients to a low storage implicit-explicit
-            Runge Kutta time stepper.
+        ch = self.c*self.dt
+        self.expch = np.exp(ch)
+        self.expch_h = np.exp(ch/2.)
+        self.expch2 = np.exp(2.*ch)
 
-            See Spalart, Moser, and Rogers. Spectral methods for the navier-stokes
-                equations with one infinite and two periodic directions. Journal of
-                Computational Physics, 96(2):297 - 324, 1991. """
+        M = 32.  # number of points for line integral in the complex plane
+        rho = 1.  # radius for complex integration
+        r = rho*np.exp(2j*np.pi*((np.arange(1.,M+1))/M))# roots for integral
 
-        self.a1, self.a2, self.a3 = 29./96., -3./40., 1./6.
-        self.b1, self.b2, self.b3 = 37./160., 5./24., 1./6.
-        self.c1, self.c2, self.c3 = 8./15., 5./12., 3./4.
-        self.d1, self.d2 = -17./60., -5./12.
+        #l1,l2 = self.ch.shape
+        #LR = np.repeat(ch,M).reshape(l1,l2,M) + np.repeat(r,l1*l2).reshape(M,l1,l2).T
+        LR = ch[...,np.newaxis] + r[np.newaxis,...]
+        LR2 = LR*LR
+        LR3 = LR2*LR
 
-        self.Linop = -(1./self.tau + self.D*self.k2)*self.dt
+        self.Qh   =  self.dt*(((np.exp(LR/2.)-1.)/LR).mean(axis=1));
+        self.f0  =  self.dt*( ( ( -4. - LR + ( np.exp(LR)*( 4. - 3.*LR + LR2 ) ) )/ LR3 ).mean(axis=1) )
+        self.fab =  self.dt*( ( ( 2. + LR + np.exp(LR)*( -2. + LR ) )/ LR3 ).mean(axis=1) )
+        self.fc  =  self.dt*( ( ( -4. -3.*LR - LR2 + np.exp(LR)*(4.-LR) )/ LR3 ).mean(axis=1) )
 
-        self.L1 = ( (1. + self.a1*self.Linop)/(1. - self.b1*self.Linop) )
-        self.L2 = ( (1. + self.a2*self.Linop)/(1. - self.b2*self.Linop) )
-        self.L3 = ( (1. + self.a2*self.Linop)/(1. - self.b3*self.Linop) )
-
-    def _step_rk3w(self):
+    def _step_etdrk4(self):
 
         self._update_S()
-        self.nl1h = self.calc_nonlin() + self.Sh
+
         self.Ah0 = self.Ah.copy()
-        self.Ah = (self.L1*self.Ah0 + self.c1*self.dt*self.nl1h).copy()
 
-        self.nl2h = self.nl1h.copy()
-        self._update_S()
-        self.nl1h = self.calc_nonlin() +  self.Sh
-        self.qh = (self.L2*self.Ah0 + self.c2*self.dt*self.nl1h +\
-                self.d1*self.dt*self.nl2h).copy()
+        Fn0 = self.calc_nonlin() + self.Sh
+        self.Ah = (self.expch_h*self.Ah0 + Fn0*self.Qh)
+        self.Ah1 = self.Ah.copy()
 
-        self.nl2h = self.nl1h.copy()
-        self.Ah0 = self.Ah.copy()
-        self._update_S()
-        self.nl1h = self.calc_nonlin() +  self.Sh
-        self.Ah = (self.L3*self.Ah0 + self.c3*self.dt*self.nl1h +\
-                self.d2*self.dt*self.nl2h).copy()
+        Fna = self.calc_nonlin() + self.Sh
+        self.Ah = (self.expch_h*self.Ah0 + Fna*self.Qh)
+
+        Fnb = self.calc_nonlin() + self.Sh
+        self.Ah = (self.expch_h*self.Ah1 + ( 2.*Fnb - Fn0 )*self.Qh)
+
+        Fnc =  self.calc_nonlin() + self.Sh
+
+        self.Ah = (self.expch*self.Ah0 + Fn0*self.f0 +  2.*(Fna+Fnb)*self.fab\
+                  + Fnc*self.fc)
+
 
     def calc_rhs(self):
 
