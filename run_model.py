@@ -5,7 +5,7 @@ import AtmosphericBlocking
 
 plt.close("all")
 
-model = AtmosphericBlocking.Model(nx=2048,Lx = 28000e3,dt=.0001*86400,alpha=0.55,
+model = AtmosphericBlocking.Model(nx=2048,Lx = 28000e3,dt=.01*86400,alpha=0.55,
                                         tmax=3.5*86400,D=3.26e5,tau=10*86400)
 
 #model.run()
