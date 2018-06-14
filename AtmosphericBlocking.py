@@ -14,6 +14,8 @@ class Model(object):
                 alpha = 0.55,
                 D=3.26e5,
                 tau=10*86400,
+                injection=True,
+                forcingpeak = 2,
                 logfile="model.out"):
 
         self.nx = nx
@@ -26,6 +28,9 @@ class Model(object):
 
         self.tau = tau
         self.D = D
+        self.Smax = forcingpeak
+        
+        self.inject = injection
 
         self.alpha = alpha
 
@@ -37,6 +42,7 @@ class Model(object):
         self._initialize_grid()
         self._initialize_C()
         self._initialize_etdrk4()
+        self._initialize_rk3w()
 
         #self._initialize_diagnostics()
 
@@ -60,6 +66,7 @@ class Model(object):
         # time step
         #self._step_euler()   # Simple-minded Euler
         self._step_etdrk4()   # Exponential time differencing RK4
+        #self._step_rk3w()
 
         self.tc += 1
         self.t += self.dt
@@ -69,6 +76,47 @@ class Model(object):
         self._update_S()
         self.rhs = self.calc_rhs()
         self.Ah += self.rhs*self.dt
+
+    def _initialize_rk3w(self):
+
+        """ This pre-computes coefficients to a low storage implicit-explicit
+            Runge Kutta time stepper.
+            See Spalart, Moser, and Rogers. Spectral methods for the navier-stokes
+                equations with one infinite and two periodic directions. Journal of
+                Computational Physics, 96(2):297 - 324, 1991. """
+
+        self.a1, self.a2, self.a3 = 29./96., -3./40., 1./6.
+        self.b1, self.b2, self.b3 = 37./160., 5./24., 1./6.
+        self.c1, self.c2, self.c3 = 8./15., 5./12., 3./4.
+        self.d1, self.d2 = -17./60., -5./12.
+
+        self.Linop = -(1./self.tau + self.D*self.k2)*self.dt
+
+        self.L1 = ( (1. + self.a1*self.Linop)/(1. - self.b1*self.Linop) )
+        self.L2 = ( (1. + self.a2*self.Linop)/(1. - self.b2*self.Linop) )
+        self.L3 = ( (1. + self.a2*self.Linop)/(1. - self.b3*self.Linop) )
+
+    def _step_rk3w(self):
+
+        self._update_S()
+        self.nl1h = self.calc_nonlin() + self.Sh
+        self.Ah0 = self.Ah.copy()
+        self.Ah = (self.L1*self.Ah0 + self.c1*self.dt*self.nl1h).copy()
+
+        self.nl2h = self.nl1h.copy()
+        self._update_S()
+        self.nl1h = self.calc_nonlin() +  self.Sh
+        self.qh = (self.L2*self.Ah0 + self.c2*self.dt*self.nl1h +\
+                self.d1*self.dt*self.nl2h).copy()
+
+        self.nl2h = self.nl1h.copy()
+        self.Ah0 = self.Ah.copy()
+        self._update_S()
+        self.nl1h = self.calc_nonlin() +  self.Sh
+        self.Ah = (self.L3*self.Ah0 + self.c3*self.dt*self.nl1h +\
+                self.d2*self.dt*self.nl2h).copy()
+
+
 
     def _initialize_etdrk4(self):
 
@@ -144,7 +192,9 @@ class Model(object):
     def _update_S(self):
         self.xc, self.Rx = 16800e3, 2800e3
         self.tc, self.Rt = 12.3*86400, 3.5*86400
-        self.S = 1.852e-5*( 1 + 2*np.exp( - ((self.x-self.xc)/self.Rx)**2 - ((self.t-self.tc)/self.Rt )**2 ) )
+        self.S = np.zeros(len(self.x)) + 1.852e-5
+        if self.inject:
+            self.S *= ( 1 + self.Smax*np.exp( - ((self.x-self.xc)/self.Rx)**2 - ((self.t-self.tc)/self.Rt )**2 ) )
         self.Sh = np.fft.rfft(self.S)
 
     def _allocate_variables(self):
