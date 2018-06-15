@@ -3,6 +3,8 @@ from numpy import pi, cos, sin, exp
 import scipy as sp
 import logging
 
+from Saving import *
+
 class Model(object):
     """  A minimalistic model for Atmospheric blocking """
 
@@ -18,7 +20,11 @@ class Model(object):
                 forcingpeak = 2,
                 sfunc = None,
                 cfunc = None,
-                logfile="model.out"):
+                logfile="model.out",
+                save_to_disk=True,
+                overwrite=True,
+                tsave_snapshots=50,
+                path = 'output/'):
 
         self.nx = nx
         self.Lx = Lx
@@ -31,15 +37,20 @@ class Model(object):
         self.tau = tau
         self.D = D
         self.Smax = forcingpeak
-        
+
         self.inject = injection
 
         self.alpha = alpha
 
         self.logfile = logfile
-        
+
         self.sfunc = sfunc
         self.cfunc = cfunc
+
+        self.save_to_disk = save_to_disk
+        self.overwrite = overwrite
+        self.tsnaps = tsave_snapshots
+        self.path = path
 
         # initializations
         self._initialize_logger()
@@ -47,7 +58,9 @@ class Model(object):
         self._initialize_grid()
         self._initialize_C()
         self._initialize_etdrk4()
-        self._initialize_rk3w()
+        #self._initialize_rk3w()
+        initialize_save_snapshots(self,self.path)
+        save_setup(self)
 
         #self._initialize_diagnostics()
 
@@ -55,6 +68,10 @@ class Model(object):
         """Run the model forward until the end."""
         while(self.t < self.tmax):
             self._step_forward()
+
+            if self.save_to_disk:
+                save_snapshots(self,fields=['t','A','F'])
+
 
         return
 
@@ -188,7 +205,8 @@ class Model(object):
 
     def calc_nonlin(self):
         self.A = np.fft.irfft(self.Ah)
-        return -1j*self.k*np.fft.rfft( (self.C-self.alpha*self.A)*self.A )
+        self.F = (self.C-self.alpha*self.A)*self.A
+        return -1j*self.k*np.fft.rfft( self.F )
 
     def _initialize_C(self):
         if self.cfunc:
