@@ -1,7 +1,7 @@
-include 'mkl_vsl.f90' 
+! include 'mkl_vsl.f90' 
        program MKL_VSL_GAUSSIAN
-       USE MKL_VSL_TYPE 
-       USE MKL_VSL
+!        USE MKL_VSL_TYPE 
+!        USE MKL_VSL
       integer, parameter :: imax = 2001,mend=600001,mind = 250
       common /array/  aa(imax+1,4),cc(imax+1),a0(imax+1)
       common /brray/  f1(imax+1,3),f2(imax+1,3),f3(imax+1,3)
@@ -10,7 +10,7 @@ include 'mkl_vsl.f90'
       real(kind=4) r1(1000),r2(1000),del(imax+1),ff(imax+1) ! 
       real(kind=4) s ! 
       real(kind=4) a, b, sigma !
-      TYPE (VSL_STREAM_STATE) :: stream
+!       TYPE (VSL_STREAM_STATE) :: stream
       integer(kind=4) errcode 
       integer(kind=4) i,j 
       integer brng,method,seed,n
@@ -30,12 +30,12 @@ include 'mkl_vsl.f90'
       n = 1000
       rkappa = 0.1*dx*dx/dt
       sigma = 2.0
-      brng=VSL_BRNG_MT19937 
+!       brng=VSL_BRNG_MT19937 
 !     method=VSL_RNG_METHOD_GAUSSIAN_ICDF 
-      method = VSL_RNG_METHOD_UNIFORM_STD
+!       method = VSL_RNG_METHOD_UNIFORM_STD
       seed=777
 ! ***** Initializing ***** 
-      errcode=vslnewstream( stream, brng, seed )
+!       errcode=vslnewstream( stream, brng, seed )
 
 
 ! ***** Initialization *****
@@ -58,8 +58,8 @@ include 'mkl_vsl.f90'
 ! ***** Main loop ****
         nfile = 0
       do m = 1,mend 
-      errcode=vsrnggaussian( method, stream, imax+1, ff, 0., sigma ) 
-      errcode=vsrnguniform( method, stream, imax+1, del, 0., eps ) 
+!       errcode=vsrnggaussian( method, stream, imax+1, ff, 0., sigma ) 
+!       errcode=vsrnguniform( method, stream, imax+1, del, 0., eps ) 
         do i = 2,imax
          f1(i,3) = (2.*alpha*a0(i+1)*aa(i+1,3)-2.*alpha*  &
                 a0(i-1)*aa(i-1,3))/(2.*dx)
@@ -125,7 +125,12 @@ include 'mkl_vsl.f90'
         if(mod(m,mind).eq.1.and.nfile.le.6000) then
           aad(:) = aa(:,4)
          if(m.ge.374000) then
-          ret = dsadata('aad.df',1,imax+1,aad)          
+!           ret = dsadata('aad.df',1,imax+1,aad)
+            open(unit=37,file="noboru_out",position='append',status='unknown')
+            do i=2,imax
+              write(37,*) aad(i)
+            enddo
+            close(37)
          endif
           nfile = nfile + 1
         endif
