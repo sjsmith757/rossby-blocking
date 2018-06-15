@@ -16,6 +16,8 @@ class Model(object):
                 tau=10*86400,
                 injection=True,
                 forcingpeak = 2,
+                sfunc = None,
+                cfunc = None,
                 logfile="model.out"):
 
         self.nx = nx
@@ -35,6 +37,9 @@ class Model(object):
         self.alpha = alpha
 
         self.logfile = logfile
+        
+        self.sfunc = sfunc
+        self.cfunc = cfunc
 
         # initializations
         self._initialize_logger()
@@ -186,15 +191,21 @@ class Model(object):
         return -1j*self.k*np.fft.rfft( (self.C-self.alpha*self.A)*self.A )
 
     def _initialize_C(self):
-        self.A0 = 10*(1-np.cos(4*np.pi*self.x/self.Lx))
-        self.C = 60 - 2*self.alpha*self.A0
+        if self.cfunc:
+            self.C,self.A0 = self.cfunc(self.x,self.Lx,self.alpha)
+        else:
+            self.A0 = 10*(1-np.cos(4*np.pi*self.x/self.Lx))
+            self.C = 60 - 2*self.alpha*self.A0
 
     def _update_S(self):
-        self.xc, self.Rx = 16800e3, 2800e3
-        self.tc, self.Rt = 12.3*86400, 3.5*86400
-        self.S = np.zeros(len(self.x)) + 1.852e-5
-        if self.inject:
-            self.S *= ( 1 + self.Smax*np.exp( - ((self.x-self.xc)/self.Rx)**2 - ((self.t-self.tc)/self.Rt )**2 ) )
+        if self.sfunc:
+            self.S = self.sfunc(self.x,self.t,inject=self.inject,peak=self.Smax)
+        else:
+            self.xc, self.Rx = 16800e3, 2800e3
+            self.tc, self.Rt = 12.3*86400, 3.5*86400
+            self.S = np.zeros(len(self.x)) + 1.852e-5
+            if self.inject:
+                self.S *= ( 1 + self.Smax*np.exp( - ((self.x-self.xc)/self.Rx)**2 - ((self.t-self.tc)/self.Rt )**2 ) )
         self.Sh = np.fft.rfft(self.S)
 
     def _allocate_variables(self):
