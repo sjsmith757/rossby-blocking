@@ -70,7 +70,7 @@ class Model(object):
             self._step_forward()
 
             if self.save_to_disk:
-                save_snapshots(self,fields=['t','A','F'])
+                save_snapshots(self,fields=['t','A','F','S'])
 
 
         return
