@@ -3,8 +3,6 @@
 import os
 import h5py
 
-from Saving import *
-
 def initialize_save_snapshots(self,path):
 
     """ Initializes class variables for saving snapshots.
