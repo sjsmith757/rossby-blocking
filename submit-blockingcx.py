@@ -7,7 +7,7 @@ _BATCHSCRIPT = ("#!/bin/bash                                                  \n
                 "#SBATCH --mem-per-cpu=2000M                                  \n"+
                 "#SBATCH --account=rossby                                         \n"
                 "#SBATCH --partition=broadwl                                       \n"+
-                "#SBATCH --time=8:00:00                                      \n"+
+                "#SBATCH --time=16:00:00                                      \n"+
                 "module load python                   \n"+
                 "cd %s                                                        \n")
 
@@ -25,13 +25,13 @@ if __name__=="__main__":
     p2 = 10.0
     
     for n in range(1,13):
-        for Y in np.logspace(0,2,num=10):
-            ndir = "cxsweep_%02.4f_%04.5f_"%(n,Y)
+        for Y in np.logspace(0,2,num=20):
+            ndir = "cxsweep_%02d_%03.1f_"%(n,Y)
             os.system("mkdir "+ndir)
             f=open(ndir+"/runblocking","w")
-            name="cxblock%02d_%04.1f_%02.1f"%(n,Y)
+            name="cxblock%02d_%03.1f"%(n,Y)
             print ndir,name
-            txt = _BATCHSCRIPT%(name,ndir)
+            txt = _BATCHSCRIPT%(name,os.getcwd()+"/"+ndir)
             txt += RUNSTRING%(n,Y,name)
             f.write(txt)
             f.close()

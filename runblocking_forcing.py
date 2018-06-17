@@ -5,13 +5,13 @@ import h5py
 import glob
 import diagnostic as dg
 
-def gaussforce(x,t,peak=2,inject=True,tw=2.5,xc=16800.0e3,xw=2800.0e3):
+def gaussforce(x,t,peak=2,inject=True,tw=2.5,xc=16800.0e3,xw=2800.0e3,tc=277.8):
   # Gaussian centered at 277.8 days and 16,800 km
-    tc = 277.8
-    tw = 2.5
+    tc = tc
+    tw = tw
     t = t/86400.0
-    xc = 16800.0e3
-    xw = 2800.0e3
+    xc = xc
+    xw = xw
     sx = 1.852e-5 + np.zeros(len(x))
     if inject:
         sx *= (1+peak*np.exp(-((x-xc)/xw)**2 - ((t-tc)/tw)**2))
@@ -19,7 +19,7 @@ def gaussforce(x,t,peak=2,inject=True,tw=2.5,xc=16800.0e3,xw=2800.0e3):
 
 class conditions:
     def __init__(self,peak=2,inject=True,Y=10,beta=60,n=2,alpha=0.55,tau=10.0,sfunc=None,
-                 tw=2.5,xc=16800.0e3,xw=2800.0e3):
+                 tw=2.5,xc=16800.0e3,xw=2800.0e3,tc=277.8):
         self.peak = peak
         self.inject=inject
         self.Y = Y
@@ -31,6 +31,7 @@ class conditions:
         self.n=n
         self.alpha = alpha
         self.tw = tw
+        self.tc = tc
         self.xc = xc
         self.xw = xw
     def forcing(self,x,t,peak=None,inject=None):
@@ -39,7 +40,7 @@ class conditions:
         if inject:
             self.inject = inject
         sx = self.sfunc(x,t,peak=self.peak,inject=self.inject,tw=self.tw,xc=self.xc,
-                        xw=self.xw)
+                        xw=self.xw,tc=self.tc)
         return sx
     def getcx(self,x,Lx,alpha=None,t=None):
         if alpha:
@@ -59,7 +60,7 @@ if __name__=="__main__":
     
     ensemble = []
     
-    for xc in np.linspace(0.25*Lx,0.75*Lx,num=2):
+    for xc in np.linspace(0.25*Lx,0.75*Lx,num=20):
     
         initc = conditions(sfunc=gaussforce,tw=tw,xc=xc,xw=xw)
         os.system("rm -rf output/")
@@ -106,7 +107,9 @@ if __name__=="__main__":
         
         nsig = np.sum(fmask)
         
-        result = {"onset":(xs,ts),
+        result = {"forcing phase":xc*initc.n/Lx,
+                  "onset":(xs,ts),
+                  "delay":(xs,ts-initc.tc),
                   "nblocks":ict}
         
         ensemble.append(result)
