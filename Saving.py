@@ -56,8 +56,8 @@ def save_snapshots(self, fields=['t','A','F']):
         Parameters
         ----------
         fields:  list of strings (optional)
-                    The fields to save. Default is time ('t'), potential vorcitiy ('q')
-                                        and streamfunction ('p').
+                    The fields to save. Default is time ('t'),
+                    wave activity ('A'), and wave-activity flux ('F').
     """
 
     if ( ( not (self.tc%self.tsnaps) ) & (self.save_to_disk) ):
