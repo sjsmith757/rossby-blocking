@@ -60,7 +60,7 @@ if __name__=="__main__":
     
     ensemble = []
     
-    for xc in np.linspace(0.25*Lx,0.75*Lx,num=20):
+    for xc in np.linspace(0.5*Lx/2.0,1.5*Lx/2.0,num=20):
     
         initc = conditions(sfunc=gaussforce,tw=tw,xc=xc,xw=xw)
         os.system("rm -rf output/")
@@ -110,7 +110,8 @@ if __name__=="__main__":
         result = {"forcing phase":xc*initc.n/Lx,
                   "onset":(xs,ts),
                   "delay":(xs,ts-initc.tc),
-                  "nblocks":ict}
+                  "nblocks":ict,
+                  "integrated blocking":nsig}
         
         ensemble.append(result)
         

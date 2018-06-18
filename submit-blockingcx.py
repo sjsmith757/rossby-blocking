@@ -26,7 +26,7 @@ if __name__=="__main__":
     
     for n in range(1,13):
         for Y in np.logspace(0,2,num=20):
-            ndir = "cxsweep_%02d_%03.1f_"%(n,Y)
+            ndir = "cxsweep_%02d_%03.1f"%(n,Y)
             os.system("mkdir "+ndir)
             f=open(ndir+"/runblocking","w")
             name="cxblock%02d_%03.1f"%(n,Y)
