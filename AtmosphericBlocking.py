@@ -21,6 +21,8 @@ class Model(object):
                 sfunc = None,
                 cfunc = None,
                 logfile="model.out",
+                printcadence=1000,
+                loglevel=0,
                 save_to_disk=True,
                 overwrite=True,
                 tsave_snapshots=50,
@@ -33,6 +35,9 @@ class Model(object):
         self.tmax = tmax
         self.t = 0.
         self.tc = 0
+        
+        self.printcadence = printcadence
+        self.loglevel = loglevel
 
         self.tau = tau
         self.D = D
@@ -70,7 +75,7 @@ class Model(object):
             self._step_forward()
 
             if self.save_to_disk:
-                save_snapshots(self,fields=['t','A','F','S'])
+                save_snapshots(self,fields=['t','A','F','S','C'])
 
 
         return
@@ -175,6 +180,7 @@ class Model(object):
     def _step_etdrk4(self):
 
         self._update_S()
+        self._update_C()
 
         self.Ah0 = self.Ah.copy()
 
@@ -210,20 +216,27 @@ class Model(object):
 
     def _initialize_C(self):
         if self.cfunc:
-            self.C,self.A0 = self.cfunc(self.x,self.Lx,self.alpha)
+            self.C,self.A0 = self.cfunc(self.x,self.Lx,self.alpha,time=self.t)
         else:
             self.A0 = 10*(1-np.cos(4*np.pi*self.x/self.Lx))
             self.C = 60 - 2*self.alpha*self.A0
 
+    def _update_C(self):
+        if self.cfunc:
+            self.C,self.A0 = self.cfunc(self.x,self.Lx,alpha=self.alpha,time=self.t)
+        else:
+            self.A0 = 10*(1-np.cos(4*np.pi*self.x/self.Lx))
+            self.C = 60 - 2*self.alpha*self.A0
+            
     def _update_S(self):
         if self.sfunc:
             self.S = self.sfunc(self.x,self.t,inject=self.inject,peak=self.Smax)
         else:
             self.xc, self.Rx = 16800e3, 2800e3
-            self.tc, self.Rt = 12.3*86400, 3.5*86400
+            self.t_c, self.Rt = 12.3*86400, 3.5*86400
             self.S = np.zeros(len(self.x)) + 1.852e-5
             if self.inject:
-                self.S *= ( 1 + self.Smax*np.exp( - ((self.x-self.xc)/self.Rx)**2 - ((self.t-self.tc)/self.Rt )**2 ) )
+                self.S *= ( 1 + self.Smax*np.exp( - ((self.x-self.xc)/self.Rx)**2 - ((self.t-self.t_c)/self.Rt )**2 ) )
         self.Sh = np.fft.rfft(self.S)
 
     def _allocate_variables(self):
@@ -284,10 +297,9 @@ class Model(object):
 
     def _print_status(self):
         """Output some basic stats."""
-        # if (self.loglevel) and ((self.tc % self.printcadence)==0):
-        #     self._calc_var()
-        #     self.logger.info('Step: %4i, Time: %3.2e, Variance: %3.2e'
-        #             , self.tc,self.t,self.var)
+        if (self.loglevel) and ((self.tc % self.printcadence)==0):
+            self.logger.info('Step: %4i, Time: %3.2e'
+                    , self.tc,self.t)
         pass
 
     ## utility methods
