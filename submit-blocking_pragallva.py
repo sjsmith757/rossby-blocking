@@ -17,12 +17,12 @@ RUNSTRING = "python noisyblocking.py %d %d %f %f %s  \n"
 
 if __name__=="__main__":
     
-    niters = 20
-    nperjob = 4
+    niters = 96
+    nperjob =16
     ntasks = niters//nperjob
-    namps = 10
+    namps = 20
     
-    for fpeak in np.linspace(1.2,2.8,num=namps):
+    for fpeak in np.linspace(0.5,4.0,num=namps):
         for i in range(0,ntasks):
             ndir = "fpeak_%1.4f_%d"%(fpeak,i)
             os.system("mkdir "+ndir)
