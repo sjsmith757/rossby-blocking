@@ -240,15 +240,15 @@ def blocking_iteration(wavenum=2,cxpeak=1.0,fpeak=1.8,nwcx=21,nwforce=26):
     
     umask = ((ugrad - np.mean(ugrad))/np.std(ugrad) > threshu)*1.0
     
-    uct,umask = dg.count_blocks(umask,80-2*wavenum,10)
-    uts = t[it0:][np.where(umask>0.5)[0]]/86400.0
-    uxs = x[np.where(umask>0.5)[1]]/1.0e3
+    uct,ucmask = dg.count_blocks(umask,80-2*wavenum,10)
+    uts = t[it0:][np.where(ucmask>0.5)[0]]/86400.0
+    uxs = x[np.where(ucmask>0.5)[1]]/1.0e3
     
     shock_size = np.sum(umask)
     
     smask = (S[it0:]>0.6e-4)*1.0
 
-    sct,scmask = count_blocks(smask,5,5)
+    sct,scmask = dg.count_blocks(smask,5,5)
     
     sts = t[it0:][np.where(scmask>0.5)[0]]/86400
     sxs = x[np.where(scmask>0.5)[1]]/1e3
@@ -316,7 +316,7 @@ if __name__=="__main__":
         avgblocksize += blocksize/niter
         
         avgnblocks_per_event += nblocks/niter/sct
-        avgblocksize_per_event += blocksize/niter/sct
+        avgsize_per_event += blocksize/niter/sct
         
         onsets.append([uxs,uts])
         events.append([sxs,sts])
@@ -341,7 +341,7 @@ if __name__=="__main__":
               "forcing_peak":fpeak,
               "forcing_coords":events,
               "avg_nblocks_perevent":avgnblocks_per_event,
-              "avg_blocksize_perevent":avgblocksize_per_event,
+              "avg_blocksize_perevent":avgsize_per_event,
               "raw_nblocks_perevent":nblockseq_perevent,
               "raw_blocksize_perevent":blockszseq_perevent}
     
