@@ -18,6 +18,25 @@ def initialize_save_snapshots(self,path):
     if (not os.path.isdir(self.fno)) & self.save_to_disk:
         os.makedirs(self.fno)
         os.makedirs(self.fno+"/snapshots/")
+        
+def save_parameters(self,fields=['t','A','F']):
+
+    """ Saves parameters used for the model simulation
+    """
+
+    if self.save_to_disk:
+
+        fno = self.fno + '/parameters.h5'
+        file_exist(fno, overwrite=self.overwrite)       
+        h5file = h5py.File(fno, 'w')
+
+        for field in fields:
+                h5file.create_dataset(field, data=eval("self."+field))
+
+        h5file.close()
+    else:
+        pass
+
 
 def file_exist(fno,overwrite=True):
 

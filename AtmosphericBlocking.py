@@ -13,6 +13,7 @@ class Model(object):
                 Lx=28000e3,
                 dt=0.1*86400,
                 tmax=100,
+                tmin=0,
                 alpha = 0.55,
                 D=3.26e5,
                 tau=10*86400,
@@ -26,6 +27,8 @@ class Model(object):
                 save_to_disk=True,
                 overwrite=True,
                 tsave_snapshots=50,
+                beta = 60,
+                verbose  = False,
                 path = 'output/'):
 
         self.nx = nx
@@ -33,6 +36,7 @@ class Model(object):
 
         self.dt = dt
         self.tmax = tmax
+        self.tmin = tmin
         self.t = 0.
         self.tc = 0
         
@@ -46,6 +50,8 @@ class Model(object):
         self.inject = injection
 
         self.alpha = alpha
+        self.beta  = beta
+        self.verbose = verbose
 
         self.logfile = logfile
 
@@ -66,6 +72,9 @@ class Model(object):
         #self._initialize_rk3w()
         initialize_save_snapshots(self,self.path)
         save_setup(self)
+        save_parameters(self,fields=['nx','Lx','dt','tmax','tmin','printcadence','loglevel','tau',\
+                                    'D','Smax','inject','alpha','beta','verbose','save_to_disk','overwrite',\
+                                    'tsnaps','path'])
 
         #self._initialize_diagnostics()
 
@@ -75,15 +84,27 @@ class Model(object):
             self._step_forward()
 
             if self.save_to_disk:
-                save_snapshots(self,fields=['t','A','F','S','C'])
-
-
+                save_snapshots(self,fields=['t','A','F','S','C', 'beta'])
         return
-
 
     #
     # private methods
     #
+       
+    def run_some_years(self):
+        """Run the model forward for 1 year."""
+        self.t = self.tmin
+        while(self.t < self.tmax):
+            self._step_forward()
+            
+            if self.save_to_disk:
+                save_snapshots(self,fields=['t','A','F','S','C', 'beta'])
+                
+        if (self.verbose==True):
+            print (str(self.t/86400.0)+" days since start")
+        return
+
+    
 
     def _step_forward(self):
 
@@ -219,7 +240,7 @@ class Model(object):
             self.C,self.A0 = self.cfunc(self.x,self.Lx,self.alpha,time=self.t)
         else:
             self.A0 = 10*(1-np.cos(4*np.pi*self.x/self.Lx))
-            self.C = 60 - 2*self.alpha*self.A0
+            self.C  = 60 - 2*self.alpha*self.A0
 
     def _update_C(self):
         if self.cfunc:

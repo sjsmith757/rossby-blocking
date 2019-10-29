@@ -7,8 +7,7 @@ _BATCHSCRIPT = ("#!/bin/bash                                                  \n
                 "#SBATCH --error=%%j_%s.err                            \n"+
                 "#SBATCH --ntasks=1                                          \n"+
                 "#SBATCH --mem-per-cpu=2000M                                  \n"+
-                "#SBATCH --account=rossby                                         \n"
-                "#SBATCH --partition=broadwl                                       \n"+
+                "#SBATCH --account=pi-nnn                                       \n"+
                 "#SBATCH --time=16:00:00                                      \n"+
                 "module load python                   \n"+
                 "cd %s                                                        \n")
@@ -17,8 +16,8 @@ RUNSTRING = "python noisyblocking.py %d %d %f %f %s  \n"
 
 if __name__=="__main__":
     
-    niters = 96
-    nperjob =16
+    niters = 240
+    nperjob =60
     ntasks = niters//nperjob
     namps = 20
     
