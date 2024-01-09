@@ -2,3 +2,8 @@
 *.mp4
 .vscode/*
 *.pyc
+output
+nc_output
+model.out
+notebooks/case?
+*.h5
