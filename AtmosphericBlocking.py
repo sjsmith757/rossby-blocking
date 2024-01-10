@@ -143,6 +143,16 @@ class Model(object):
             print(str(self.t / 86400.0) + " days since start")
         return
 
+    def reset(self):
+        """
+        Reset the model's internal time and wave activity so that it can be run again
+        from the initial conditions. Otherwise, the model will always continue from its
+        previous state.
+        """
+        self.t = 0
+        self._allocate_variables()
+        return
+
     def _step_forward(self):
         # status
         self._print_status()
@@ -298,13 +308,12 @@ class Model(object):
         if self.sfunc:
             self.S = self.sfunc(self.x, self.t, inject=self.inject, peak=self.Smax)
         else:
-            self.xc, self.Rx = 16800e3, 2800e3
-            self.t_c, self.Rt = 12.3 * 86400, 3.5 * 86400
-            self.S = np.zeros(len(self.x)) + 1.852e-5
+            self.S = np.ones_like(self.x) * 1.852e-5
             if self.inject:
+                xc, Rx = 16800e3, 2800e3
+                t_c, Rt = 12.3 * 86400, 3.5 * 86400
                 self.S *= 1 + self.Smax * np.exp(
-                    -(((self.x - self.xc) / self.Rx) ** 2)
-                    - ((self.t - self.t_c) / self.Rt) ** 2
+                    -(((self.x - xc) / Rx) ** 2) - ((self.t - t_c) / Rt) ** 2
                 )
         self.Sh = np.fft.rfft(self.S)
 
