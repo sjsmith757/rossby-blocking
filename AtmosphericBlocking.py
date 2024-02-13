@@ -12,6 +12,7 @@ class Model(object):
         save_setup,
         save_snapshots,
         to_dataset,
+        join_snapshots,
     )
 
     def __init__(
@@ -34,6 +35,7 @@ class Model(object):
         save_to_disk=True,
         overwrite=True,
         tsave_snapshots=50,
+        tsave_start=0,
         beta=60,
         verbose=False,
         path="output/",
@@ -69,6 +71,7 @@ class Model(object):
         self.save_to_disk = save_to_disk
         self.overwrite = overwrite
         self.tsnaps = tsave_snapshots
+        self.snapstart = tsave_start
         self.path = path
 
         self.use_xr = False

@@ -144,12 +144,31 @@ def save_snapshots(self, fields=["t", "A", "F"]):
                 wave activity ('A'), and wave-activity flux ('F').
     """
 
-    if (not (self.tc % self.tsnaps)) & (self.save_to_disk):
-        fno = self.fno + f"/snapshots/{self.t:015.0f}"
-        file_exist(fno, stem=".nc" if self.use_xr else ".h5")
-        if self.use_xr:
-            xr_writer(self, fno, snaps=True)
-        else:
-            h5writer(self, fno, fields)
-    else:
-        pass
+    if self.t >= self.snapstart:
+        if (not (self.tc % self.tsnaps)) & (self.save_to_disk):
+            fno = self.fno + f"/snapshots/{self.t:015.0f}"
+            file_exist(fno, stem=".nc" if self.use_xr else ".h5")
+            if self.use_xr:
+                xr_writer(self, fno, snaps=True)
+            else:
+                h5writer(self, fno, fields)
+
+
+def join_snapshots(self):
+    if self.use_xr:
+        try:
+            import xarray as xr
+        except ImportError:
+            warnings.warn(
+                "cannot join dataset without xarray installed", UserWarning, 2
+            )
+            return
+
+        fno = self.fno + "/snapshots/"
+        files = [fno + f for f in list(os.walk(fno))[0][2]]
+        ds = xr.open_mfdataset(files)
+        fout = (
+            f"{self.fno}/{files[0].split('/')[-1][:-3]}_"
+            f"{files[-1].split('/')[-1][:-3]}.nc"
+        )
+        ds.to_netcdf(fout)
