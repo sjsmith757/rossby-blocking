@@ -154,7 +154,7 @@ def save_snapshots(self, fields=["t", "A", "F"]):
                 h5writer(self, fno, fields)
 
 
-def join_snapshots(self):
+def join_snapshots(self, odir=None):
     if self.use_xr:
         try:
             import xarray as xr
@@ -167,8 +167,10 @@ def join_snapshots(self):
         fno = self.fno + "/snapshots/"
         files = [fno + f for f in list(os.walk(fno))[0][2]]
         ds = xr.open_mfdataset(files)
+        if odir is None:
+            odir = self.fno
         fout = (
-            f"{self.fno}/{files[0].split('/')[-1][:-3]}_"
+            f"{odir}/{self.path.rstrip('/')}.{files[0].split('/')[-1][:-3]}_"
             f"{files[-1].split('/')[-1][:-3]}.nc"
         )
         ds.to_netcdf(fout)
