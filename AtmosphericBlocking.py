@@ -23,8 +23,118 @@ class CFuncType(Protocol):
     ) -> Tuple[np.ndarray, np.ndarray]: ...
 
 
+docstr = r"""
+
+    A minimal model for solving the 1D wave activity equation
+
+    The equation the model solves
+
+    .. math::
+
+    \frac{\partial}{\partial t}\hat{A}(x,t) = -\frac{\partial}{\partial x}\left[\left(C(x) - \alpha\hat{A}\right)\hat{A}\right] + \hat{S} - \frac{\hat{A}}{\tau}+ D\frac{\partial^2\hat{A}}{\partial x^2}
+
+
+    Parameters
+    ----------
+    nx : int, optional
+        grid size, by default 128
+    Lx : float, optional
+        the physical distance spanned by the grid, by default 28000e3
+    dt : float, optional
+        the model integration timestep, in s, by default 0.1*86400
+    tmax : float, optional
+        how long to run the model, in s, by default 100.0
+    tmin : float, optional
+        the time to begin integration, by default 0.0
+    alpha : float or :py:class:`np.ndarray[nx]`, optional
+        the alpha parameter, or the regression slope between zonal wind and wave
+        activity, by default 0.55. If alpha is an array, it should be the same
+        dimensions as the grid (nx)
+    D : float, optional
+        the D parameter, corresponding to the diffusivity of wave activity, by
+        default 3.26e5
+    tau : float, optional
+        the damping timescale for wave activity, in s, by default 10*86400.0
+    injection : bool, optional
+        whether to inject a temporally and spatially localized forcing, by default
+        True
+    forcingpeak : float, optional
+        how large the injected forcing should be, by default 2.0
+    sfunc : Callable, optional
+        the functional form of the stochastic forcing. The default uses values from
+        Nakamura and Huang 2018. :func:`sfunc` should accept the following parameters:
+
+            * x (:py:class:`np.ndarray`): the model grid
+            * t (float): the model time step
+            * inject (bool): whether to inject a one-time forcing
+            * peak (float): the scaling factor for the forcing
+
+        :func:`sfunc` should return a :py:class:`np.ndarray[nx]`.
+
+        The default :func:`sfunc` used is
+
+    .. math::
+
+    \hat{S} = \hat{S_0} \left\{ 1+\hat{S}_{\text{max}}\exp \left[ -\left(\frac{x-x_c}{x_w}\right)^2 -\left(\frac{t-t_c}{t_w}\right)^2 \right] \right\}
+
+    cfunc : Callable, optional
+        the functional form of the wave group velocity. The default uses values from
+        Nakamura and Huang 2018. :func:`cfunc` should accept the following parameters:
+
+            * x (:py:class:`np.ndarray`): the model grid
+            * Lx (float): the model length scale
+            * alpha (float): the model alpha
+            * time (float): the model time step
+
+        :func:`cfunc` should return two :py:class:`np.ndarray[nx]`, corresponding to
+        the group velocity (C) and the stationary wave amplitude (A0), respectively.
+
+        The default function used is
+
+    .. math::
+
+    C(x) = \beta - 2\alpha A_0(x)
+
+        where
+
+    .. math::
+
+    A_0(x) = 10.0*\left[1-\cos\left(\frac{4\pi x}{L_x}\right)\right]
+
+    beta : float, optional
+        the beta to be used by the model if using the default :func:`cfunc`,
+        by default 60.0.
+
+    IOInterface Parameters
+    ----------------------
+    The following parameters determine how the model logs and outputs its data.
+
+    logfile : str, optional
+        the path to the log file to create, by default "model.out". Setting the
+        logfile to none will output the log information to sys.stdout
+    printcadence : int, optional
+        the frequency to log the model's status, by default 1000
+    loglevel : int or ["NOTSET", "DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
+                optional
+        the logging level to utilize, by default "INFO"
+    save_to_disk : bool, optional
+        whether to save the results of a model run, by default True
+    overwrite : bool, optional
+        whether to overwrite previous cases of the same name, by default True
+    tsave_snapshots : int, optional
+        how often to save snapshots of the model's internal state, by default 50
+    tsave_start : float, optional
+        when to begin saving snapshots, by default 0.0
+    verbose : bool, optional
+        deprecated parameter. loglevel should be used instead, by default None
+    path : str, optional
+        the root directory for the model experiment, by default "output/"
+    io_backend : ["h5", "xr"], optional
+        the backend to use for writing data, by default "h5"
+    """
+
+
 class Model(IOInterface):
-    """A minimalistic model for Atmospheric blocking"""
 
     def __init__(
         self,
@@ -52,116 +162,6 @@ class Model(IOInterface):
         path: str = "output/",
         io_backend: Literal["h5", "xr"] = "h5",
     ):
-        r"""
-
-        A minimal model for solving the 1D wave activity equation
-
-        The equation the model solves
-
-        .. math::
-
-        \frac{\partial}{\partial t}\hat{A}(x,t) = -\frac{\partial}{\partial x}\left[\left(C(x) - \alpha\hat{A}\right)\hat{A}\right] + \hat{S} - \frac{\hat{A}}{\tau}+ D\frac{\partial^2\hat{A}}{\partial x^2}
-
-
-        Parameters
-        ----------
-        nx : int, optional
-            grid size, by default 128
-        Lx : float, optional
-            the physical distance spanned by the grid, by default 28000e3
-        dt : float, optional
-            the model integration timestep, in s, by default 0.1*86400
-        tmax : float, optional
-            how long to run the model, in s, by default 100.0
-        tmin : float, optional
-            the time to begin integration, by default 0.0
-        alpha : float or :py:class:`np.ndarray[nx]`, optional
-            the alpha parameter, or the regression slope between zonal wind and wave
-            activity, by default 0.55. If alpha is an array, it should be the same
-            dimensions as the grid (nx)
-        D : float, optional
-            the D parameter, corresponding to the diffusivity of wave activity, by
-            default 3.26e5
-        tau : float, optional
-            the damping timescale for wave activity, in s, by default 10*86400.0
-        injection : bool, optional
-            whether to inject a temporally and spatially localized forcing, by default
-            True
-        forcingpeak : float, optional
-            how large the injected forcing should be, by default 2.0
-        sfunc : Callable, optional
-            the functional form of the stochastic forcing. The default uses values from
-            Nakamura and Huang 2018. :func:`sfunc` should accept the following parameters:
-
-                * x (:py:class:`np.ndarray`): the model grid
-                * t (float): the model time step
-                * inject (bool): whether to inject a one-time forcing
-                * peak (float): the scaling factor for the forcing
-
-            :func:`sfunc` should return a :py:class:`np.ndarray[nx]`.
-
-            The default :func:`sfunc` used is
-
-        .. math::
-
-        \hat{S} = \hat{S_0} \left\{ 1+\hat{S}_{\text{max}}\exp \left[ -\left(\frac{x-x_c}{x_w}\right)^2 -\left(\frac{t-t_c}{t_w}\right)^2 \right] \right\}
-
-        cfunc : Callable, optional
-            the functional form of the wave group velocity. The default uses values from
-            Nakamura and Huang 2018. :func:`cfunc` should accept the following parameters:
-
-                * x (:py:class:`np.ndarray`): the model grid
-                * Lx (float): the model length scale
-                * alpha (float): the model alpha
-                * time (float): the model time step
-
-            :func:`cfunc` should return two :py:class:`np.ndarray[nx]`, corresponding to
-            the group velocity (C) and the stationary wave amplitude (A0), respectively.
-
-            The default function used is
-
-        .. math::
-
-        C(x) = \beta - 2\alpha A_0(x)
-
-            where
-
-        .. math::
-
-        A_0(x) = 10.0*\left[1-\cos\left(\frac{4\pi x}{L_x}\right)\right]
-
-        beta : float, optional
-            the beta to be used by the model if using the default :func:`cfunc`,
-            by default 60.0.
-
-        IOInterface Parameters
-        ----------------------
-        The following parameters determine how the model logs and outputs its data.
-
-        logfile : str, optional
-            the path to the log file to create, by default "model.out". Setting the
-            logfile to none will output the log information to sys.stdout
-        printcadence : int, optional
-            the frequency to log the model's status, by default 1000
-        loglevel : int or ["NOTSET", "DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
-                   optional
-            the logging level to utilize, by default "INFO"
-        save_to_disk : bool, optional
-            whether to save the results of a model run, by default True
-        overwrite : bool, optional
-            whether to overwrite previous cases of the same name, by default True
-        tsave_snapshots : int, optional
-            how often to save snapshots of the model's internal state, by default 50
-        tsave_start : float, optional
-            when to begin saving snapshots, by default 0.0
-        verbose : bool, optional
-            deprecated parameter. loglevel should be used instead, by default None
-        path : str, optional
-            the root directory for the model experiment, by default "output/"
-        io_backend : ["h5", "xr"], optional
-            the backedn to use for writing data, by default "h5"
-        """
-
         self.nx = nx
         self.Lx = Lx
         self.dt = dt
@@ -470,3 +470,7 @@ class Model(IOInterface):
         """compute variance of p from Fourier coefficients ph"""
         var_dens = 2.0 * np.abs(ph) ** 2 / self.nx**2
         return var_dens.sum()
+
+
+Model.__doc__ = docstr
+Model.__init__.__doc__ = docstr
