@@ -7,3 +7,4 @@ nc_output
 model.out
 notebooks/case?
 *.h5
+.dmypy.json
