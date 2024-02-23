@@ -33,7 +33,7 @@ class Model(IOInterface):
         dt: float = 0.1 * 86400,
         tmax: float = 100.0,
         tmin: float = 0.0,
-        alpha: float = 0.55,
+        alpha: Union[float, np.ndarray] = 0.55,
         D: float = 3.26e5,
         tau: float = 10 * 86400.0,
         injection: bool = True,
@@ -75,9 +75,10 @@ class Model(IOInterface):
             how long to run the model, in s, by default 100.0
         tmin : float, optional
             the time to begin integration, by default 0.0
-        alpha : float, optional
+        alpha : float or :py:class:`np.ndarray[nx]`, optional
             the alpha parameter, or the regression slope between zonal wind and wave
-            activity, by default 0.55
+            activity, by default 0.55. If alpha is an array, it should be the same
+            dimensions as the grid (nx)
         D : float, optional
             the D parameter, corresponding to the diffusivity of wave activity, by
             default 3.26e5
