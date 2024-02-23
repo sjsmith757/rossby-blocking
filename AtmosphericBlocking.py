@@ -1,102 +1,204 @@
-import warnings
+from __future__ import annotations
 import numpy as np
-import logging
+from typing import Protocol, Optional, Literal, Tuple, List, TYPE_CHECKING, Union
+from Saving import IOInterface
+from functools import wraps
+
+if TYPE_CHECKING:
+    try:
+        import xarray as xr
+    except ImportError:
+        pass
 
 
-class Model(object):
+class SFuncType(Protocol):
+    def __call__(  # noqa: E704
+        self, x: np.ndarray, t: float, inject: bool = ..., peak: float = ...
+    ) -> np.ndarray: ...
+
+
+class CFuncType(Protocol):
+    def __call__(  # noqa: E704
+        self, x: np.ndarray, Lx: float, alpha: float, time: float = ...
+    ) -> Tuple[np.ndarray, np.ndarray]: ...
+
+
+class Model(IOInterface):
     """A minimalistic model for Atmospheric blocking"""
-
-    from Saving import (
-        initialize_save_snapshots,
-        save_parameters,
-        save_setup,
-        save_snapshots,
-        to_dataset,
-        join_snapshots,
-    )
 
     def __init__(
         self,
-        nx=128,
-        Lx=28000e3,
-        dt=0.1 * 86400,
-        tmax=100,
-        tmin=0,
-        alpha=0.55,
-        D=3.26e5,
-        tau=10 * 86400,
-        injection=True,
-        forcingpeak=2,
-        sfunc=None,
-        cfunc=None,
-        logfile="model.out",
-        printcadence=1000,
-        loglevel=0,
-        save_to_disk=True,
-        overwrite=True,
-        tsave_snapshots=50,
-        tsave_start=0,
-        beta=60,
-        verbose=False,
-        path="output/",
-        io_backend="h5",
+        nx: int = 128,
+        Lx: float = 28000e3,
+        dt: float = 0.1 * 86400,
+        tmax: float = 100.0,
+        tmin: float = 0.0,
+        alpha: float = 0.55,
+        D: float = 3.26e5,
+        tau: float = 10 * 86400.0,
+        injection: bool = True,
+        forcingpeak: float = 2.0,
+        sfunc: Optional[SFuncType] = None,
+        cfunc: Optional[CFuncType] = None,
+        beta: float = 60.0,
+        logfile: Optional[str] = "model.out",
+        printcadence: int = 1000,
+        loglevel: Union[int, str] = "WARNING",
+        save_to_disk: bool = True,
+        overwrite: bool = True,
+        tsave_snapshots: int = 50,
+        tsave_start: float = 0.0,
+        verbose: Optional[bool] = None,
+        path: str = "output/",
+        io_backend: Literal["h5", "xr"] = "h5",
     ):
+        r"""
+
+        A minimal model for solving the 1D wave activity equation
+
+        The equation the model solves
+
+        .. math::
+
+        \frac{\partial}{\partial t}\hat{A}(x,t) = -\frac{\partial}{\partial x}\left[\left(C(x) - \alpha\hat{A}\right)\hat{A}\right] + \hat{S} - \frac{\hat{A}}{\tau}+ D\frac{\partial^2\hat{A}}{\partial x^2}
+
+
+        Parameters
+        ----------
+        nx : int, optional
+            grid size, by default 128
+        Lx : float, optional
+            the physical distance spanned by the grid, by default 28000e3
+        dt : float, optional
+            the model integration timestep, in s, by default 0.1*86400
+        tmax : float, optional
+            how long to run the model, in s, by default 100.0
+        tmin : float, optional
+            the time to begin integration, by default 0.0
+        alpha : float, optional
+            the alpha parameter, or the regression slope between zonal wind and wave
+            activity, by default 0.55
+        D : float, optional
+            the D parameter, corresponding to the diffusivity of wave activity, by
+            default 3.26e5
+        tau : float, optional
+            the damping timescale for wave activity, in s, by default 10*86400.0
+        injection : bool, optional
+            whether to inject a temporally and spatially localized forcing, by default
+            True
+        forcingpeak : float, optional
+            how large the injected forcing should be, by default 2.0
+        sfunc : Callable, optional
+            the functional form of the stochastic forcing. The default uses values from
+            Nakamura and Huang 2018. :func:`sfunc` should accept the following parameters:
+
+                * x (:py:class:`np.ndarray`): the model grid
+                * t (float): the model time step
+                * inject (bool): whether to inject a one-time forcing
+                * peak (float): the scaling factor for the forcing
+
+            :func:`sfunc` should return a :py:class:`np.ndarray[nx]`.
+
+            The default :func:`sfunc` used is
+
+        .. math::
+
+        \hat{S} = \hat{S_0} \left\{ 1+\hat{S}_{\text{max}}\exp \left[ -\left(\frac{x-x_c}{x_w}\right)^2 -\left(\frac{t-t_c}{t_w}\right)^2 \right] \right\}
+
+        cfunc : Callable, optional
+            the functional form of the wave group velocity. The default uses values from
+            Nakamura and Huang 2018. :func:`cfunc` should accept the following parameters:
+
+                * x (:py:class:`np.ndarray`): the model grid
+                * Lx (float): the model length scale
+                * alpha (float): the model alpha
+                * time (float): the model time step
+
+            :func:`cfunc` should return two :py:class:`np.ndarray[nx]`, corresponding to
+            the group velocity (C) and the stationary wave amplitude (A0), respectively.
+
+            The default function used is
+
+        .. math::
+
+        C(x) = \beta - 2\alpha A_0(x)
+
+            where
+
+        .. math::
+
+        A_0(x) = 10.0*\left[1-\cos\left(\frac{4\pi x}{L_x}\right)\right]
+
+        beta : float, optional
+            the beta to be used by the model if using the default :func:`cfunc`,
+            by default 60.0.
+
+        IOInterface Parameters
+        ----------------------
+        The following parameters determine how the model logs and outputs its data.
+
+        logfile : str, optional
+            the path to the log file to create, by default "model.out". Setting the
+            logfile to none will output the log information to sys.stdout
+        printcadence : int, optional
+            the frequency to log the model's status, by default 1000
+        loglevel : int or ["NOTSET", "DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
+                   optional
+            the logging level to utilize, by default "INFO"
+        save_to_disk : bool, optional
+            whether to save the results of a model run, by default True
+        overwrite : bool, optional
+            whether to overwrite previous cases of the same name, by default True
+        tsave_snapshots : int, optional
+            how often to save snapshots of the model's internal state, by default 50
+        tsave_start : float, optional
+            when to begin saving snapshots, by default 0.0
+        verbose : bool, optional
+            deprecated parameter. loglevel should be used instead, by default None
+        path : str, optional
+            the root directory for the model experiment, by default "output/"
+        io_backend : ["h5", "xr"], optional
+            the backedn to use for writing data, by default "h5"
+        """
+
         self.nx = nx
         self.Lx = Lx
-
         self.dt = dt
         self.tmax = tmax
         self.tmin = tmin
-        self.t = 0.0
-        self.tc = 0
-
-        self.printcadence = printcadence
-        self.loglevel = loglevel
-
+        self.t: float = 0.0
+        self.tc: int = 0
         self.tau = tau
         self.D = D
         self.Smax = forcingpeak
-
         self.inject = injection
-
         self.alpha = alpha
         self.beta = beta
-        self.verbose = verbose
-
-        self.logfile = logfile
-
         self.sfunc = sfunc
         self.cfunc = cfunc
 
-        self.save_to_disk = save_to_disk
-        self.overwrite = overwrite
-        self.tsnaps = tsave_snapshots
-        self.snapstart = tsave_start
-        self.path = path
-
-        self.use_xr = False
-        if io_backend == "xr":
-            try:
-                import xarray
-
-                self.use_xr = True
-            except ImportError():
-                warnings.warn(
-                    "xarray backend was selected, but xarray is not installed."
-                    " Defaulting to h5py backend.",
-                    UserWarning,
-                    2,
-                )
-
         # initializations
-        self._initialize_logger()
+        super().__init__(
+            logfile=logfile,
+            printcadence=printcadence,
+            loglevel=loglevel,
+            save_to_disk=save_to_disk,
+            overwrite=overwrite,
+            tsave_snapshots=tsave_snapshots,
+            tsave_start=tsave_start,
+            verbose=verbose,
+            path=path,
+            io_backend=io_backend,
+        )
         self._allocate_variables()
         self._initialize_grid()
         self._initialize_C()
         self._initialize_etdrk4()
         # self._initialize_rk3w()
-        self.initialize_save_snapshots(self.path)
-        self.save_setup()
+
+        self.save_setup(
+            fields=["grid/nx", "grid/x", "grid/k"], dtypes=["int", "float", "float"]
+        )
         self.save_parameters(
             fields=[
                 "nx",
@@ -104,36 +206,28 @@ class Model(object):
                 "dt",
                 "tmax",
                 "tmin",
-                "printcadence",
-                "loglevel",
                 "tau",
                 "D",
                 "Smax",
                 "inject",
                 "alpha",
                 "beta",
-                "verbose",
-                "save_to_disk",
-                "overwrite",
-                "tsnaps",
-                "path",
             ],
         )
 
-    def run(self):
+    def run(self) -> None:
         """Run the model forward until the end."""
         while self.t < self.tmax:
             self._step_forward()
 
             if self.save_to_disk:
                 self.save_snapshots(fields=["t", "A", "F", "S", "C", "beta"])
-        return
 
     #
     # private methods
     #
 
-    def run_some_years(self):
+    def run_some_years(self) -> None:
         """Run the model forward for 1 year."""
         self.t = self.tmin
         while self.t < self.tmax:
@@ -142,21 +236,19 @@ class Model(object):
             if self.save_to_disk:
                 self.save_snapshots(fields=["t", "A", "F", "S", "C", "beta"])
 
-        if self.verbose:
+        if self._verbose:
             print(str(self.t / 86400.0) + " days since start")
-        return
 
-    def reset(self):
+    def reset(self) -> None:
         """
         Reset the model's internal time and wave activity so that it can be run again
         from the initial conditions. Otherwise, the model will always continue from its
         previous state.
         """
-        self.t = 0
+        self.t = 0.0
         self._allocate_variables()
-        return
 
-    def _step_forward(self):
+    def _step_forward(self) -> None:
         # status
         self._print_status()
 
@@ -168,12 +260,12 @@ class Model(object):
         self.tc += 1
         self.t += self.dt
 
-    def _step_euler(self):
+    def _step_euler(self) -> None:
         self._update_S()
         self.rhs = self.calc_rhs()
         self.Ah += self.rhs * self.dt
 
-    def _initialize_rk3w(self):
+    def _initialize_rk3w(self) -> None:
         """This pre-computes coefficients to a low storage implicit-explicit
         Runge Kutta time stepper.
         See Spalart, Moser, and Rogers. Spectral methods for the navier-stokes
@@ -191,10 +283,10 @@ class Model(object):
         self.L2 = (1.0 + self.a2 * self.Linop) / (1.0 - self.b2 * self.Linop)
         self.L3 = (1.0 + self.a2 * self.Linop) / (1.0 - self.b3 * self.Linop)
 
-    def _step_rk3w(self):
+    def _step_rk3w(self) -> None:
         self._update_S()
-        self.nl1h = self.calc_nonlin() + self.Sh
-        self.Ah0 = self.Ah.copy()
+        self.nl1h: np.ndarray = self.calc_nonlin() + self.Sh
+        self.Ah0: np.ndarray = self.Ah.copy()
         self.Ah = (self.L1 * self.Ah0 + self.c1 * self.dt * self.nl1h).copy()
 
         self.nl2h = self.nl1h.copy()
@@ -206,7 +298,7 @@ class Model(object):
             + self.d1 * self.dt * self.nl2h
         ).copy()
 
-        self.nl2h = self.nl1h.copy()
+        self.nl2h: np.ndarray = self.nl1h.copy()
         self.Ah0 = self.Ah.copy()
         self._update_S()
         self.nl1h = self.calc_nonlin() + self.Sh
@@ -216,7 +308,7 @@ class Model(object):
             + self.d2 * self.dt * self.nl2h
         ).copy()
 
-    def _initialize_etdrk4(self):
+    def _initialize_etdrk4(self) -> None:
         """This performs pre-computations for the Expotential Time Differencing
         Fourth Order Runge Kutta time stepper. The linear part is calculated
         exactly.
@@ -230,7 +322,7 @@ class Model(object):
         ch = self.c * self.dt
         self.expch = np.exp(ch)
         self.expch_h = np.exp(ch / 2.0)
-        self.expch2 = np.exp(2.0 * ch)
+        # self.expch2 = np.exp(2.0 * ch)
 
         M = 32.0  # number of points for line integral in the complex plane
         rho = 1.0  # radius for complex integration
@@ -240,22 +332,23 @@ class Model(object):
 
         # l1,l2 = self.ch.shape
         # LR = np.repeat(ch,M).reshape(l1,l2,M) + np.repeat(r,l1*l2).reshape(M,l1,l2).T
+        # Assume L is diagonal in Fourier space
         LR = ch[..., np.newaxis] + r[np.newaxis, ...]
         LR2 = LR * LR
         LR3 = LR2 * LR
 
-        self.Qh = self.dt * (((np.exp(LR / 2.0) - 1.0) / LR).mean(axis=1))
-        self.f0 = self.dt * (
+        self.Qh: np.ndarray = self.dt * (((np.exp(LR / 2.0) - 1.0) / LR).mean(axis=1))
+        self.f0: np.ndarray = self.dt * (
             ((-4.0 - LR + (np.exp(LR) * (4.0 - 3.0 * LR + LR2))) / LR3).mean(axis=1)
         )
-        self.fab = self.dt * (
+        self.fab: np.ndarray = self.dt * (
             ((2.0 + LR + np.exp(LR) * (-2.0 + LR)) / LR3).mean(axis=1)
         )
-        self.fc = self.dt * (
+        self.fc: np.ndarray = self.dt * (
             ((-4.0 - 3.0 * LR - LR2 + np.exp(LR) * (4.0 - LR)) / LR3).mean(axis=1)
         )
 
-    def _step_etdrk4(self):
+    def _step_etdrk4(self) -> None:
         self._update_S()
         self._update_C()
 
@@ -280,34 +373,40 @@ class Model(object):
             + Fnc * self.fc
         )
 
-    def calc_rhs(self):
-        self.NonLin = self.calc_nonlin()
-
+    def calc_rhs(self) -> np.ndarray:
+        """Calculate the right hand side of the 1D wave activity equation"""
+        NonLin = self.calc_nonlin()
         # linear terms
-        self.Lin = -(1.0 / self.tau + self.D * self.k2) * self.Ah
+        Lin = -(1.0 / self.tau + self.D * self.k2) * self.Ah
 
-        return self.Lin + self.NonLin + self.Sh
+        return Lin + NonLin + self.Sh
 
-    def calc_nonlin(self):
+    def _update_F(self) -> None:
         self.A = np.fft.irfft(self.Ah)
         self.F = (self.C - self.alpha * self.A) * self.A
+
+    def calc_nonlin(self) -> np.ndarray:
+        """Calculate the nonlinear portion of the equation"""
+        self._update_F()
         return -1j * self.k * np.fft.rfft(self.F)
 
-    def _initialize_C(self):
+    def _initialize_C(self) -> None:
+        self.A0: np.ndarray
+        self.C: np.ndarray
         if self.cfunc:
             self.C, self.A0 = self.cfunc(self.x, self.Lx, self.alpha, time=self.t)
         else:
             self.A0 = 10 * (1 - np.cos(4 * np.pi * self.x / self.Lx))
-            self.C = 60 - 2 * self.alpha * self.A0
+            self.C = self.beta - 2 * self.alpha * self.A0
 
-    def _update_C(self):
+    def _update_C(self) -> None:
         if self.cfunc:
             self.C, self.A0 = self.cfunc(self.x, self.Lx, alpha=self.alpha, time=self.t)
         else:
             self.A0 = 10 * (1 - np.cos(4 * np.pi * self.x / self.Lx))
             self.C = 60 - 2 * self.alpha * self.A0
 
-    def _update_S(self):
+    def _update_S(self) -> None:
         if self.sfunc:
             self.S = self.sfunc(self.x, self.t, inject=self.inject, peak=self.Smax)
         else:
@@ -318,44 +417,21 @@ class Model(object):
                 self.S *= 1 + self.Smax * np.exp(
                     -(((self.x - xc) / Rx) ** 2) - ((self.t - t_c) / Rt) ** 2
                 )
-        self.Sh = np.fft.rfft(self.S)
+        self.Sh: np.ndarray = np.fft.rfft(self.S)
 
-    def _allocate_variables(self):
+    def _allocate_variables(self) -> None:
         """Allocate variables in memory"""
 
-        self.dtype_real = np.dtype("float64")
-        self.dtype_cplx = np.dtype("complex128")
-        self.shape_real = self.nx
-        self.shape_cplx = self.nx // 2 + 1
+        self._dtype_real = np.dtype("float64")
+        self._dtype_cplx = np.dtype("complex128")
+        self._shape_real = self.nx
+        self._shape_cplx = self.nx // 2 + 1
 
         # Wave activity
-        self.A = np.zeros(self.nx)
-        self.Ah = np.fft.rfft(self.A)
+        self.A: np.ndarray = np.zeros(self.nx)
+        self.Ah: np.ndarray = np.fft.rfft(self.A)
 
-    # logger
-    def _initialize_logger(self):
-        self.logger = logging.getLogger(__name__)
-
-        if self.logfile:
-            fhandler = logging.FileHandler(filename=self.logfile, mode="w")
-        else:
-            fhandler = logging.StreamHandler()
-
-        formatter = logging.Formatter("%(levelname)s: %(message)s")
-
-        fhandler.setFormatter(formatter)
-
-        if not self.logger.handlers:
-            self.logger.addHandler(fhandler)
-
-        self.logger.setLevel(10)
-
-        # this prevents the logger to propagate into the ipython notebook log
-        self.logger.propagate = False
-
-        self.logger.info(" Logger initialized")
-
-    def _initialize_grid(self):
+    def _initialize_grid(self) -> None:
         """Initialize lattice and spectral space grid"""
 
         # physical space grids (the lattice)
@@ -372,14 +448,24 @@ class Model(object):
 
         self.k2 = self.k**2
 
-    def _print_status(self):
-        """Output some basic stats."""
-        if (self.loglevel) and ((self.tc % self.printcadence) == 0):
-            self.logger.info("Step: %4i, Time: %3.2e", self.tc, self.t)
-        pass
+    @wraps(IOInterface.to_dataset)
+    def to_dataset(
+        self,
+        coords: List[Tuple[str, np.ndarray]] = [],
+        dvars: List[str] = ["beta", "A", "F", "S", "C", "alpha"],
+        params: List[str] = ["inject"],
+    ) -> xr.Dataset:
+        if not coords:
+            coords = [
+                ("t", np.array([self.t])),
+                ("x", self.x),
+                ("k", self.k),
+            ]
+        dvars += ["nx", "Lx", "dt", "tmax", "tmin", "tau", "Smax", "D"]
+        return IOInterface.to_dataset(self, coords=coords, dvars=dvars, params=params)
 
     # utility methods
-    def spec_var(self, ph):
+    def spec_var(self, ph: np.ndarray):
         """compute variance of p from Fourier coefficients ph"""
         var_dens = 2.0 * np.abs(ph) ** 2 / self.nx**2
         return var_dens.sum()
