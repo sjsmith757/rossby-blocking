@@ -1,6 +1,15 @@
 from __future__ import annotations
 import numpy as np
-from typing import Protocol, Optional, Literal, Tuple, List, TYPE_CHECKING, Union
+from typing import (
+    Protocol,
+    Optional,
+    Literal,
+    Sequence,
+    Tuple,
+    List,
+    TYPE_CHECKING,
+    Union,
+)
 from Saving import IOInterface
 from functools import wraps
 
@@ -12,13 +21,13 @@ if TYPE_CHECKING:
 
 
 class SFuncType(Protocol):
-    def __call__(  # noqa: E704
+    def __call__(
         self, x: np.ndarray, t: float, inject: bool = ..., peak: float = ...
     ) -> np.ndarray: ...
 
 
 class CFuncType(Protocol):
-    def __call__(  # noqa: E704
+    def __call__(
         self, x: np.ndarray, Lx: float, alpha: float, time: float = ...
     ) -> Tuple[np.ndarray, np.ndarray]: ...
 
@@ -31,7 +40,9 @@ docstr = r"""
 
     .. math::
 
-    \frac{\partial}{\partial t}\hat{A}(x,t) = -\frac{\partial}{\partial x}\left[\left(C(x) - \alpha\hat{A}\right)\hat{A}\right] + \hat{S} - \frac{\hat{A}}{\tau}+ D\frac{\partial^2\hat{A}}{\partial x^2}
+    \frac{\partial}{\partial t}\hat{A}(x,t) =
+    -\frac{\partial}{\partial x}\left[\left(C(x) - \alpha\hat{A}\right)\hat{A}\right]
+    + \hat{S} - \frac{\hat{A}}{\tau} + D\frac{\partial^2\hat{A}}{\partial x^2}
 
 
     Parameters
@@ -75,7 +86,9 @@ docstr = r"""
 
     .. math::
 
-    \hat{S} = \hat{S_0} \left\{ 1+\hat{S}_{\text{max}}\exp \left[ -\left(\frac{x-x_c}{x_w}\right)^2 -\left(\frac{t-t_c}{t_w}\right)^2 \right] \right\}
+    \hat{S} = \hat{S_0} \left\{ 1+\hat{S}_{\text{max}}\exp \left[
+        -\left(\frac{x-x_c}{x_w}\right)^2
+        -\left(\frac{t-t_c}{t_w}\right)^2 \right] \right\}
 
     cfunc : Callable, optional
         the functional form of the wave group velocity. The default uses values from
@@ -452,16 +465,44 @@ class Model(IOInterface):
     @wraps(IOInterface.to_dataset)
     def to_dataset(
         self,
-        coords: List[Tuple[str, np.ndarray]] = [],
-        dvars: List[str] = ["beta", "A", "F", "S", "C", "alpha"],
-        params: List[str] = ["inject"],
+        coords: Sequence[Tuple[str, np.ndarray]] = tuple(),
+        dvars: Optional[List[str]] = None,
+        params: Optional[List[str]] = None,
     ) -> xr.Dataset:
+        """
+        if xarray is installed, convert the model fields into a dataset for output to
+        a file
+
+        Parameters
+        ----------
+        coords : Sequence[Tuple[str, np.ndarray]], optional
+            A sequence of tuples of the form (coord_name, coord_values), by default
+              (("t", Model.t), ("x", Model.x), ("k", Model.k))
+        dvars : List[str], optional
+            a list of the variable names to include, by default
+              ["beta", "A", "F", "S", "C", "alpha"]. The following variables are always
+              included in the output: "nx", "Lx", "dt", "tmax", "tmin", "tau", "Smax",
+              and "D"
+        params : List[str], optional
+            a list of the parameters to include as metadata on the file, by
+            default "inject"
+
+        Returns
+        -------
+        xr.Dataset
+            a dataset containing the model information specified
+        """
+
         if not coords:
-            coords = [
+            coords = (
                 ("t", np.array([self.t])),
                 ("x", self.x),
                 ("k", self.k),
-            ]
+            )
+        if dvars is None:
+            dvars = ["beta", "A", "F", "S", "C", "alpha"]
+        if params is None:
+            params = ["inject"]
         dvars += ["nx", "Lx", "dt", "tmax", "tmin", "tau", "Smax", "D"]
         return IOInterface.to_dataset(self, coords=coords, dvars=dvars, params=params)
 

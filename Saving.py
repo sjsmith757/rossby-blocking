@@ -3,7 +3,16 @@
 from __future__ import annotations
 import os
 import h5py
-from typing import List, Optional, Tuple, Union, Literal, TYPE_CHECKING
+from typing import (
+    Iterable,
+    List,
+    Optional,
+    Sequence,
+    Tuple,
+    Union,
+    Literal,
+    TYPE_CHECKING,
+)
 import warnings
 import logging
 import numpy as np
@@ -69,6 +78,7 @@ class IOInterface(object):
             warnings.warn(
                 "the verbose argument is deprecated and will soon be removed",
                 DeprecationWarning,
+                stacklevel=2,
             )
         else:
             verbose = False
@@ -118,7 +128,7 @@ class IOInterface(object):
             os.makedirs(path)
             os.makedirs(path + "/snapshots/")
 
-    def save_parameters(self, fields: List[str] = []):
+    def save_parameters(self, fields: Optional[List[str]] = None):
         """
         Saves parameters used for the model simulation
 
@@ -135,6 +145,8 @@ class IOInterface(object):
             file_exist(
                 fno, overwrite=self.overwrite, stem=".nc" if self.use_xr else ".h5"
             )
+            if fields is None:
+                fields = []
             if self.use_xr:
                 xr_writer(self, fno, fields=[])
             else:
@@ -153,9 +165,9 @@ class IOInterface(object):
 
     def to_dataset(
         self,
-        coords: List[Tuple[str, np.ndarray]] = [],
-        dvars: List[str] = [],
-        params: List[str] = [],
+        coords: Sequence[Tuple[str, np.ndarray]] = tuple(),
+        dvars: Iterable[str] = tuple(),
+        params: Optional[List[str]] = None,
     ) -> xr.Dataset:
         """
         If xarray is installed, convert the model internals to a dataset for output as a
@@ -163,12 +175,12 @@ class IOInterface(object):
 
         Parameters
         ----------
-        coords : list of (str, :py:class:`np.ndarray`), optional
-            a list of tuple containing the coordinate names and coordinate values
-        dvars: list of str, optional
-            a list of the dimensionalized variables to include
+        coords : sequence of (str, :py:class:`np.ndarray`), optional
+            a sequence of tuple containing the coordinate names and coordinate values
+        dvars: iterable of str, optional
+            an iterable of the dimensionalized variables to include
         params:
-            a list of metadata variables to include
+            a list of metadata variables to include, optional
 
         Returns
         -------
@@ -201,6 +213,8 @@ class IOInterface(object):
             if cn not in ds:
                 ds[cn] = xr.Coordinates({cn: cv})
 
+        if params is None:
+            params = []
         params.extend(
             [
                 "printcadence",
@@ -241,13 +255,13 @@ class IOInterface(object):
 
         return
 
-    def save_snapshots(self, fields: List[str] = []):
+    def save_snapshots(self, fields: Sequence[str] = tuple()):
         """
         Save snapshots of model simulations.
 
         Parameters
         ----------
-        fields:  list of strings (optional)
+        fields:  sequence of strings (optional)
                     The fields to save.
         """
 
@@ -262,8 +276,8 @@ class IOInterface(object):
 
     def join_snapshots(self, odir: Optional[str] = None):
         """
-        combine individual temporal snapshots from the model into a single output file. This
-        is currently only supported if using the xarray backend (`io_backend="xr"`)
+        combine individual temporal snapshots from the model into a single output file.
+        This is currently only supported if using the xarray backend (`io_backend="xr"`)
 
         Parameters
         ----------
@@ -342,7 +356,7 @@ def file_exist(fno: str, overwrite: bool = True, stem: str = ".h5"):
 
 
 def h5writer(
-    model: IOInterface, fno: str, fields: List[str], dtypes: DtypesList = None
+    model: IOInterface, fno: str, fields: Sequence[str], dtypes: DtypesList = None
 ):
     """
     file creator for outputing model internals to am HDF5 file
@@ -353,7 +367,7 @@ def h5writer(
         An instance of an AtmosphericBlocking.Model to output
     fno : str
         the file name to create
-    fields : List[str]
+    fields : Sequence[str]
         the fields to write to the file
     dtypes : List[str], optional
         the datatypes for the output fields, by default inferred from the data
@@ -370,7 +384,7 @@ def h5writer(
             h5file.create_dataset(field, data=data, dtype=dtype)
 
 
-def xr_writer(model: Union[IOInterface, Model], fno: str, fields: List[str]):
+def xr_writer(model: Union[IOInterface, Model], fno: str, fields: Iterable[str]):
     """
     file creater for saving model internals as a netcdf file
 
@@ -380,8 +394,8 @@ def xr_writer(model: Union[IOInterface, Model], fno: str, fields: List[str]):
         an instance of an AtmosphericBlocking.Model
     fno : str
         the name of the output file to create
-    snaps : bool
-        whether to include the model temporally varying fields
+    fields : Iterable[str]
+        an iterable of the field names to write
     """
     ds = model.to_dataset(dvars=fields)
     if ds is not None:
