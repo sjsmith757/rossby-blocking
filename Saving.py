@@ -16,6 +16,7 @@ from typing import (
 import warnings
 import logging
 import numpy as np
+from types import MethodType
 
 if TYPE_CHECKING:
     from AtmosphericBlocking import Model
@@ -195,7 +196,19 @@ class IOInterface(object):
         var_list: List[Union[xr.DataArray, xr.Coordinates]] = []
         for v in dvars:
             if v not in [c for c, _ in coords]:
-                arr = np.array(getattr(self, v))
+                try:
+                    arr = np.array(getattr(self, v))
+                except AttributeError:
+                    avail_attrs = [
+                        att
+                        for att in dir(self)
+                        if (not isinstance(getattr(self, att), MethodType))
+                        and (att[0] != "_")
+                    ]
+                    raise ValueError(
+                        f"{v} is not an available field of the model to save. "
+                        + f"The available fields are: {', '.join(avail_attrs)}"
+                    )
                 if arr.squeeze().ndim == 1:
                     da = xr.DataArray(
                         arr[None],

@@ -144,6 +144,8 @@ docstr = r"""
         the root directory for the model experiment, by default "output/"
     io_backend : ["h5", "xr"], optional
         the backend to use for writing data, by default "h5"
+    output_fields : sequence of str, optional
+        the model fields to output, by default "t", "A", "F", "S", "C", and "beta"
     """
 
 
@@ -174,6 +176,7 @@ class Model(IOInterface):
         verbose: Optional[bool] = None,
         path: str = "output/",
         io_backend: Literal["h5", "xr"] = "h5",
+        output_fields: Sequence[str] = ("t", "A", "F", "S", "C", "beta"),
     ):
         self.nx = nx
         self.Lx = Lx
@@ -228,6 +231,13 @@ class Model(IOInterface):
                 "beta",
             ],
         )
+        output_fields = list(output_fields)
+        required_fields = ["A", "t", "F", "C"]
+        for v in required_fields:
+            if v not in output_fields:
+                output_fields.append(v)
+
+        self.fields = output_fields
 
     def run(self) -> None:
         """Run the model forward until the end."""
@@ -235,7 +245,7 @@ class Model(IOInterface):
             self._step_forward()
 
             if self.save_to_disk:
-                self.save_snapshots(fields=["t", "A", "F", "S", "C", "beta"])
+                self.save_snapshots(fields=self.fields)
 
     #
     # private methods
